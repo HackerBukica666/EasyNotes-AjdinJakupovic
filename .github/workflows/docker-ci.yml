@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -27,19 +27,20 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.MY_ACCESS_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and export Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
+          push: false
           tags: |
             ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
             ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
           outputs: type=docker,dest=${{ env.IMAGE_FILE }}
 
       - name: Upload Docker image as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-image
           path: ${{ env.IMAGE_FILE }}
@@ -50,10 +51,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download Docker image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: docker-image
 
@@ -104,11 +105,12 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
-      packages: write # Erlaubt das Pushen zu ghcr.io
+      contents: read
+      packages: write # Berechtigungen für ghcr.io notwendig
 
     steps:
       - name: Download Docker image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: docker-image
 
@@ -120,9 +122,10 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.MY_ACCESS_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker image
         run: |
           docker push ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
+          docker tag ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }} ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
