@@ -75,7 +75,7 @@ jobs:
             mysql:5.7
 
       - name: Wait for MySQL startup
-        run: sleep 15
+        run: sleep 30 # Wartezeit auf 30 Sekunden erhöht
 
       - name: Initialize database
         run: docker exec -i mysql-test mysql -ueasynotes -peasynotes easynotes < dbseed.sql
@@ -93,6 +93,11 @@ jobs:
 
       - name: Verify application
         run: docker ps | grep easy-notes-test
+
+      - name: Test application with curl
+        run: |
+          docker run --rm --network test-network alpine sh -c \
+          "apk add --no-cache curl && curl -f http://easy-notes-test:8080/ || exit 1"
 
       - name: Cleanup
         run: |
