@@ -1,37 +1,27 @@
 name: Docker CI/CD
 
-# Definiert, wann der Workflow ausgeführt wird
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
-# Globale Umgebungsvariablen für alle Jobs
 env:
-  # Dateiname des Docker-Images für die Zwischenspeicherung
   IMAGE_FILE: 'easy-notes-image.tar'
-  # Die Adresse der Container-Registry, wo das Image gespeichert werden soll
   REGISTRY_PATH: 'ghcr.io/hackerbukica666'
-  # Der Name des Docker-Images
   IMAGE_NAME: 'easy-notes'
-  # Die aktuelle Version des Docker-Images (aus package.json übernommen)
   IMAGE_VERSION: '1.0.4'
 
-# Definition der Jobs
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Code aus dem Repository auschecken
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Docker Buildx für erweiterte Build-Funktionen einrichten
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Bei der GitHub Container Registry anmelden
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -39,15 +29,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.MY_ACCESS_TOKEN }}
 
-      # Docker-Image bauen und als Datei exportieren
       - name: Build and export Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          tags: ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
+          tags: |
+            ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
+            ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
           outputs: type=docker,dest=${{ env.IMAGE_FILE }}
 
-      # Docker-Image als Artefakt hochladen für Verwendung in späteren Jobs
       - name: Upload Docker image as artifact
         uses: actions/upload-artifact@v3
         with:
@@ -59,25 +49,20 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # Code aus dem Repository auschecken
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Docker-Image aus vorherigem Job herunterladen
       - name: Download Docker image
         uses: actions/download-artifact@v3
         with:
           name: docker-image
 
-      # Docker-Image laden
       - name: Load Docker image
         run: docker load < ${{ env.IMAGE_FILE }}
 
-      # Test-Netzwerk erstellen für Container-Kommunikation
       - name: Create test network
         run: docker network create test-network
 
-      # MySQL-Container für Tests starten
       - name: Start MySQL container
         run: |
           docker run -d --name mysql-test \
@@ -88,15 +73,12 @@ jobs:
             -e MYSQL_PASSWORD=easynotes \
             mysql:5.7
 
-      # Warten, bis MySQL vollständig gestartet ist
       - name: Wait for MySQL startup
         run: sleep 15
 
-      # Datenbank mit dem Schema initialisieren
       - name: Initialize database
         run: docker exec -i mysql-test mysql -ueasynotes -peasynotes easynotes < dbseed.sql
 
-      # Applikations-Container mit Test-Einstellungen starten
       - name: Run application container
         run: |
           docker run -d --name easy-notes-test \
@@ -108,11 +90,9 @@ jobs:
             -e DB_PASS=easynotes \
             ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
 
-      # Überprüfen, ob die Anwendung läuft
       - name: Verify application
         run: docker ps | grep easy-notes-test
 
-      # Test-Umgebung aufräumen
       - name: Cleanup
         run: |
           docker stop easy-notes-test mysql-test
@@ -122,30 +102,27 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    # Nur auf dem main-Branch ausführen
     if: github.ref == 'refs/heads/main'
+    permissions:
+      packages: write # Erlaubt das Pushen zu ghcr.io
+
     steps:
-      # Docker-Image aus vorherigem Job herunterladen
       - name: Download Docker image
         uses: actions/download-artifact@v3
         with:
           name: docker-image
 
-      # Docker-Image laden
       - name: Load Docker image
         run: docker load < ${{ env.IMAGE_FILE }}
 
-      # Bei der GitHub Container Registry anmelden
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.MY_ACCESS_TOKEN }}
 
-      # Docker-Image zur Registry pushen
       - name: Push Docker image
         run: |
           docker push ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
-          docker tag ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }} ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
