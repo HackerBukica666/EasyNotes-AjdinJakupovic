@@ -1,0 +1,33 @@
+name: Update CD Configuration
+
+on:
+  workflow_run:
+    workflows: ["Docker CI/CD"]
+    types:
+      - completed
+
+jobs:
+  update-cd:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      - name: Set up Git
+        run: |
+          git config --global user.name "Your Name"
+          git config --global user.email "your.email@example.com"
+      
+      - name: Clone CD Repository
+        uses: actions/checkout@v4
+        with:
+          repository: YOUR_GITHUB_USERNAME/EasyNotes-CD
+          token: ${{ secrets.CD_ACCESS_TOKEN }}
+          path: cd-repo
+      
+      - name: Update Image Version
+        run: |
+          cd cd-repo
+          sed -i "s|image: ghcr.io/hackerbukica666/easy-notes:.*|image: ghcr.io/hackerbukica666/easy-notes:${{ github.event.workflow_run.head_sha }}|" easynotes-deployment.yml
+          git add easynotes-deployment.yml
+          git commit -m "Update image version to ${{ github.event.workflow_run.head_sha }}"
+          git push
